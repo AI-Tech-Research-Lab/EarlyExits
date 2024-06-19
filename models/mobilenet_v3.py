@@ -4,8 +4,11 @@ import torch
 from torch import nn
 import torch.nn.utils as utils
 import os
+import sys
 
-from early_exit.models.base import BranchModel
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
+from base import BranchModel
 from ofa.imagenet_classification.networks import MobileNetV3
 from ofa.utils import MyGlobalAvgPool2d
 

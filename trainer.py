@@ -10,12 +10,15 @@ from torch.optim.lr_scheduler import StepLR, MultiStepLR
 from tqdm import tqdm
 
 import os
+import sys
 
-from early_exit.evaluators import standard_eval, branches_eval, binary_eval, \
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
+from evaluators import standard_eval, branches_eval, binary_eval, \
     binary_statistics
-from early_exit.models.base import BranchModel
-from early_exit.models.mobilenet_v3 import EEMobileNetV3
-from early_exit.utils_ee import calculate_centroids_confidences, calculate_centroids_scores, extract_balanced_subset, get_device, \
+from models.base import BranchModel
+from models.mobilenet_v3 import EEMobileNetV3
+from utils_ee import calculate_centroids_confidences, calculate_centroids_scores, extract_balanced_subset, get_device, \
  get_intermediate_backbone_cost, get_intermediate_classifiers_cost, save_eenn
 from copy import deepcopy
 

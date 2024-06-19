@@ -6,11 +6,14 @@ import torch
 from torch import nn
 
 import os, sys
-sys.path.append(os.getcwd())
 
-from early_exit.models.base import BranchModel, IntermediateBranch
-from train_utils import get_device
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
 
+from models.base import BranchModel, IntermediateBranch
+
+def get_device(model: nn.Module):
+    return next(model.parameters()).device
 
 def accuracy_score(expected: np.asarray, predicted: np.asarray, topk=None):
     if topk is None:

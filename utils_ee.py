@@ -2,6 +2,9 @@ import copy
 import json
 import random
 import os
+import sys
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(script_dir)
 
 import numpy as np
 from ofa.utils.pytorch_utils import count_parameters
@@ -16,10 +19,10 @@ from torch.utils.data import DataLoader, Subset
 from train_utils import get_device 
 from utils import get_net_info   
 
-from early_exit.models.base import BinaryIntermediateBranch, IntermediateBranch
-from early_exit.models.mobilenet_v3 import EEMobileNetV3, FinalClassifier
-from early_exit.models.costs import module_cost
-from early_exit.evaluators import binary_eval
+from models.base import BinaryIntermediateBranch, IntermediateBranch
+from models.mobilenet_v3 import EEMobileNetV3, FinalClassifier
+from models.costs import module_cost
+from evaluators import binary_eval
 
 def get_intermediate_backbone_cost(backbone, input_size):
     # Compute the MACs of the backbone up to the b-th exit for each exit
