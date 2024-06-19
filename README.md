@@ -6,6 +6,8 @@ The Early Exit Classifiers are designed in two procedures contained in `utils_ee
 
 The `binary_branch=True` refers to the models of NACHOS where each branch returns two values the logits and the confidence value (the output dimension is #num_classes + 1 for the confidence) while `binary_branch=False` refers to the models used in EDANAS which are standard EECs returning only the logits.
 
+# References
+
 [1] EDANAS: Adaptive Neural Architecture Search for Early Exit Neural Networks, IJCNN 2023 (https://ieeexplore.ieee.org/document/10191876)
 
 [2] NACHOS: Neural Architecture Search for Hardware Constrained Early Exit Neural Networks (https://arxiv.org/abs/2401.13330)
