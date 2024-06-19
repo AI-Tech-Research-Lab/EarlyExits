@@ -11,3 +11,5 @@ The `binary_branch=True` refers to the models of NACHOS where each branch return
 [1] EDANAS: Adaptive Neural Architecture Search for Early Exit Neural Networks, IJCNN 2023 (https://ieeexplore.ieee.org/document/10191876)
 
 [2] NACHOS: Neural Architecture Search for Hardware Constrained Early Exit Neural Networks (https://arxiv.org/abs/2401.13330)
+
+[3] A Probabilistic Re-Intepretation of Confidence Scores in Multi-Exit Models, Entropy 2022 (https://www.mdpi.com/1099-4300/24/1/1)
