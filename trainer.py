@@ -784,8 +784,14 @@ def binary_bernulli_trainer(model: BranchModel,
 
             en_loss = energy_loss(exit_costs, distributions)
             energy_losses.append(en_loss.item())            
+            
 
-            loss = w_alpha*cl_loss + (reg_term * current_prior_w) + w_beta * en_loss
+            loss = w_alpha*cl_loss + (reg_term * current_prior_w)
+
+            if w_beta:
+                en_loss = energy_loss(exit_costs, distributions)
+                energy_losses.append(en_loss.item())
+                loss += w_beta * en_loss 
 
             if(epoch>=n_epoch_gamma):
 
