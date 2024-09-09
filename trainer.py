@@ -778,13 +778,7 @@ def binary_bernulli_trainer(model: BranchModel,
 
             cl_loss = classification_loss(preds, y, distributions, drop=True)
 
-            losses.append(cl_loss.item())
-            
-            #w_energy = 1 
-
-            en_loss = energy_loss(exit_costs, distributions)
-            energy_losses.append(en_loss.item())            
-            
+            losses.append(cl_loss.item())         
 
             loss = w_alpha*cl_loss + (reg_term * current_prior_w)
 
