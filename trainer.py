@@ -785,7 +785,7 @@ def binary_bernulli_trainer(model: BranchModel,
             if w_beta:
                 en_loss = energy_loss(exit_costs, distributions)
                 energy_losses.append(en_loss.item())
-                loss += w_beta * en_loss 
+                loss = loss + w_beta * en_loss 
 
             if(epoch>=n_epoch_gamma):
 
@@ -794,12 +794,12 @@ def binary_bernulli_trainer(model: BranchModel,
                    w_gg=10
                    g_loss = gate_loss(sigma)
                    gate_losses.append(g_loss.item())
-                   loss += w_gg * g_loss
+                   loss = loss + w_gg * g_loss
                 
                 sup_loss = support_loss(support_matrix, y, distributions)
                 support_losses.append(sup_loss.item())
                 #w_s = 1
-                loss += + w_gamma * sup_loss
+                loss = loss + w_gamma * sup_loss
         
             optimizer.zero_grad()
             loss.backward()
