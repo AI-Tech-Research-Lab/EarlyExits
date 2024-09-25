@@ -3,9 +3,13 @@ import json
 import random
 import os
 import sys
+
+from EarlyExits.models.efficientnet import EEEfficientNet, EfficientNetClassifier, replace_silu_with_relu
 script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(script_dir)
-
+home_dir = os.path.expanduser('~')  # This will return the home directory path (e.g., /home/username)
+# Concatenate the home directory with the 'EarlyExits/models' path
+repo_dir = os.path.join(home_dir, 'workspace/CNAS')
 import numpy as np
 from ofa.utils.pytorch_utils import count_parameters
 
@@ -13,16 +17,19 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torchprofile import profile_macs
-
+from torch.nn import Conv2d,ReLU,Linear,Sequential,Flatten,BatchNorm2d,AvgPool2d,MaxPool2d
 from torch.utils.data import DataLoader, Subset
 
-from train_utils import get_device 
-from utils import get_net_info   
+#from train_utils import get_device 
+#from utils import get_net_info   
 
 from models.base import BinaryIntermediateBranch, IntermediateBranch
 from models.mobilenet_v3 import EEMobileNetV3, FinalClassifier
 from models.costs import module_cost
 from evaluators import binary_eval
+
+def get_device(model: nn.Module):
+    return next(model.parameters()).device
 
 def get_intermediate_backbone_cost(backbone, input_size):
     # Compute the MACs of the backbone up to the b-th exit for each exit
@@ -206,11 +213,22 @@ def get_intermediate_classifiers_static(model,
 
     return predictors
 
+def get_last_classifier(fc,model_name,n_classes):
+    if model_name == 'ofamobilenetv3':
+        seq = nn.Sequential(fc.final_expand_layer, fc.global_avg_pool, fc.feature_mix_layer, nn.Flatten())
+        cl = fc.classifier
+    elif model_name == 'efficientnet':
+        seq=nn.Sequential(fc.seq, nn.Flatten())
+        cl = fc.classifier
+    else:
+        raise ValueError('Model not supported')
+    return seq,cl
 
 def get_intermediate_classifiers_adaptive(model, final_classifier,
                                  image_size,
                                  n_classes,
-                                 binary_branch=False):
+                                 binary_branch=False,
+                                 model_name='ofamobilenetv3'):
                                  #fix_last_layer=False):
     
     predictors = nn.ModuleList()
@@ -228,8 +246,15 @@ def get_intermediate_classifiers_adaptive(model, final_classifier,
     x = x.to(device)
     outputs = model(x) 
     filters = [32,64,128]
-    seq = nn.Sequential(fc.final_expand_layer, fc.global_avg_pool, fc.feature_mix_layer, nn.Flatten())
-    cl = fc.classifier
+    seq,cl=get_last_classifier(final_classifier, model_name, n_classes)
+    '''
+    if model_name == 'ofamobilenetv3':
+        seq = nn.Sequential(fc.final_expand_layer, fc.global_avg_pool, fc.feature_mix_layer, nn.Flatten())
+        cl = fc.classifier
+    elif model_name == 'efficientnet':
+        seq=fc.seq
+        cl = fc.classifier
+    '''
     if binary_branch:
         final_classifier = BinaryIntermediateBranch(preprocessing=seq,
                                                  classifier=cl,
@@ -619,6 +644,19 @@ def get_eenn(subnet, subnet_path, res, n_classes, get_binaries=False):
     
     return backbone, classifiers, epsilon
 
+def get_ee_efficientnet(model, img_size, n_classes, get_binaries=False):
+    # Generate intermediate classifiers for the early exit points
+    final_classifier = EfficientNetClassifier(n_classes)
+    final_classifier.seq = model.avgpool
+    final_classifier.classifier = model.classifier
+    backbone = EEEfficientNet(model)
+    net = copy.deepcopy(backbone)
+    replace_silu_with_relu(net) #replace silu with 2 relus since torchprofile cannot compute MACs for silu
+    img_size = (3, img_size, img_size)
+    predictors = get_intermediate_classifiers_adaptive(net, final_classifier, img_size, n_classes=n_classes, model_name='efficientnet', binary_branch=get_binaries)
+    epsilon = [1,1,1,1] #place all the EECs
+    return backbone, predictors, epsilon
+
 def save_eenn(backbone, classifiers, best_backbone, best_classifiers, best_score, epoch, optimizer, ckpt_path):
     checkpoint = {
         'backbone_state': backbone.state_dict(),
@@ -631,17 +669,99 @@ def save_eenn(backbone, classifiers, best_backbone, best_classifiers, best_score
     }
     torch.save(checkpoint, ckpt_path)
 
-'''
-def get_eenn_from_OFA(subnet_path, n_classes=10, supernet='supernets/ofa_mbv3_d234_e346_k357_w1.0', pretrained=True, early_exit=False):
+def get_net_info(net, input_shape=(3, 224, 224), print_info=False):
+    """
+    Modified from https://github.com/mit-han-lab/once-for-all/blob/
+    35ddcb9ca30905829480770a6a282d49685aa282/ofa/imagenet_codebase/utils/pytorch_utils.py#L139
+    """
 
-    print("SUBNET PATH: ", subnet_path)
-    config = json.load(open(subnet_path))
-    ofa = OFAEvaluator(n_classes=n_classes,
-    model_path=supernet,
-    pretrained = pretrained)
-    r=config.get("r",32)
-    input_shape = (3,r,r)
-    subnet, _ = ofa.sample({'ks': config['ks'], 'e': config['e'], 'd': config['d']})
-    subnet = EEMobileNetV3(subnet.first_conv, subnet.blocks, config['b'], config['d'], subnet.final_expand_layer, subnet.feature_mix_layer, subnet.classifier)
-    return subnet, r
-'''
+    # artificial input data
+    inputs = torch.randn(1, 3, input_shape[-2], input_shape[-1])
+
+    # move network to GPU if available
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0')
+        net = net.to(device)
+        cudnn.benchmark = True
+        inputs = inputs.to(device)
+
+    net_info = {}
+    if isinstance(net, nn.DataParallel):
+        net = net.module
+    
+    net.eval() # this avoids batch norm error https://discuss.pytorch.org/t/error-expected-more-than-1-value-per-channel-when-training/26274
+
+    # parameters
+    net_info['params'] = np.round(count_parameters(net)/1e6,2)
+
+    net = copy.deepcopy(net)
+
+    net_info['macs'] = np.round(profile_macs(net, inputs)/1e6,2)
+
+    # activation_size
+    #net_info['activations'] = np.round(profile_activation_size(net, inputs)/1e6,2)
+
+    if print_info:
+        # print(net)
+        print('Total training params: %.2fM' % (net_info['params']))
+        print('Total MACs: %.2fM' % ( net_info['macs']))
+        print('Total activations: %.2fM' % (net_info['activations']))
+
+    return net_info
+
+target_layers = {'Conv2D':Conv2d,
+                 'Flatten':Flatten,
+                 'Dense':Linear,
+                 'BatchNormalization':BatchNorm2d,
+                 'AveragePooling2D':AvgPool2d,
+                 'MaxPooling2D':MaxPool2d
+                 }
+
+activations = {}
+
+def hook_fn(m, i, o):
+    #if (o.shape != NULL):
+    activations[m] = [i,o]#.shape  #m is the layer
+
+def get_all_layers(net):
+  layers = {}
+  names = {}
+  index = 0
+  for name, layer in net.named_modules():#net._modules.items():
+    #print(name)
+    layers[index] = layer
+    names[index] = name
+    index = index + 1
+    
+  #If it is a sequential or a block of modules, don't register a hook on it
+  # but recursively register hook on all it's module children
+  length = len(layers)
+  for i in range(length):
+    if (i==(length-1)):
+      layers[i].register_forward_hook(hook_fn)
+    else:
+      if ((isinstance(layers[i], nn.Sequential)) or   #sequential
+          (names[i+1].startswith(names[i] + "."))):  #container of layers
+        continue
+      else:
+        layers[i].register_forward_hook(hook_fn)
+
+def profile_activation_size(model,input):
+    activations.clear()
+    get_all_layers(model) #add hooks to model layers
+    out = model(input) #computes activation while passing through layers
+    
+    total = 0
+    
+    for name, layer in model.named_modules():
+      for label, target in target_layers.items():
+        if(isinstance(layer,target)):
+          #print(name)
+
+          activation_shape = activations[layer][1].shape
+          activation_size = 1
+          for i in activation_shape:
+            activation_size = activation_size * i
+          total = total + activation_size
+    
+    return total

@@ -2,6 +2,7 @@ import copy
 import logging
 
 import numpy as np
+from EarlyExits.models.efficientnet import EEEfficientNet
 import torch
 from torch import nn
 from torch.distributions import RelaxedBernoulli
@@ -480,7 +481,7 @@ def binary_bernulli_trainer(model: BranchModel,
     
     input_size = (3,resolution,resolution)
 
-    if(isinstance(model,EEMobileNetV3)):
+    if(isinstance(model,EEMobileNetV3) or isinstance(model,EEEfficientNet)):
        _, b_macs = get_intermediate_backbone_cost(model, input_size)
     else:
        dict_macs = model.computational_cost(torch.randn((1, 3, resolution, resolution)))
